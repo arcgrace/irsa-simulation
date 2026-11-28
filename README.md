@@ -31,6 +31,11 @@
 
 ## 程式說明
 
+| 檔案 | 內容 |
+|---|---|
+| `irsa_simulation.py` | 碰撞模型下的 IRSA 模擬，比較不同副本數分布（結果 1～3） |
+| `irsa_sinr.py` | 延伸：加入衰落與 SINR 門檻，與碰撞模型比較（結果 4） |
+
 - `simulate_frame(n_users, n_slots, degrees, probs, rng)`：模擬一個 frame，回傳解出的人數。
   每個使用者依照機率 `probs` 從 `degrees` 中抽出自己的副本數。
 - 主程式對每個負載 G 跑多個 frame（預設 200 個）取平均，畫出 T 對 G 的曲線。
@@ -71,19 +76,44 @@
 - 在我的模擬中，3 copies 大約在 G ≈ 0.78 前貼著理想線（文獻中的理論門檻約 0.82）；
   Liva 分布大約在 G ≈ 0.87 前貼著理想線（文獻中的理論門檻為 0.938，為 frame 無限大時的值）。
 
+## 延伸：加入衰落與 SINR 門檻
+
+碰撞模型只看「時槽裡有幾個封包」。在真實的無線通道中，每份副本到達接收端時的強度都不同（衰落，fading），
+且存在雜訊。因此我把解碼規則改成看 SINR（訊號對干擾加雜訊比）：
+
+```
+SINR = S / (I + N)
+```
+
+- S：想解的那個使用者的訊號功率；I：同一時槽其他使用者的訊號功率總和；N：雜訊功率。
+- 每份副本的接收功率 = 平均 SNR × 指數分布隨機數（Rayleigh 衰落下的功率），各副本彼此獨立。
+- 每個時槽中，若訊號最強的使用者 SINR ≥ γ，就解出他，並用 SIC 從其他時槽扣掉他的副本。
+- 參數：平均 SNR = 10（雜訊功率設為 1）、門檻 γ = 2、每人 3 份副本、每個 frame 100 個時槽。
+
+### 4. 碰撞模型 vs SINR 模型（每人 3 份副本）
+
+![碰撞模型與 SINR 模型比較](figures/sinr_vs_collision.png)
+
+- 碰撞模型約在 G ≈ 0.7 崩潰；SINR 模型可撐到 G ≈ 1.1，傳輸量接近 1。
+- 原因是**捕獲效應**（capture effect）：多個封包撞在同一時槽時，若其中一個夠強，仍可被解出，再透過 SIC 救回更多封包。
+- 低負載時 SINR 模型略低於理想線：少數使用者的所有副本都因衰落而太弱，即使時槽中只有自己也解不出來，這是碰撞模型看不到的現象。
+
 ## 執行方式
 
 ```bash
 python -m pip install -r requirements.txt
-python irsa_simulation.py
+python irsa_simulation.py   # 結果 1～3（參數在程式上方調整）
+python irsa_sinr.py         # 結果 4
 ```
 
 ## 未來想嘗試的方向
 
-- 改用 SINR 門檻判斷是否解得出來，加入雜訊與衰落（fading），觀察捕獲效應（capture effect）的影響。
+- 在 SINR 模型下比較不同的副本數分布，觀察最佳分布是否與碰撞模型不同。
+- 考慮不完美的干擾消除（扣掉副本後仍有殘餘干擾）。
 - 以模擬結果作為評分，搭配搜尋或最佳化方法，自行尋找更好的副本數分布。
 
 ## 參考文獻
 
+- F. Clazzer, E. Paolini, I. Mambelli, and Č. Stefanović, "Irregular Repetition Slotted ALOHA over the Rayleigh Block Fading Channel with Capture," *IEEE ICC*, 2017.
 - G. Liva, "Graph-Based Analysis and Optimization of Contention Resolution Diversity Slotted ALOHA,"
   *IEEE Transactions on Communications*, vol. 59, no. 2, pp. 477–487, 2011.
